@@ -1,0 +1,128 @@
+name: Update Roblox Visit Stats
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-roblox-visit-stats
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch Roblox visit count
+        id: roblox
+        shell: bash
+        env:
+          PLACE_ID: "86495471270335"
+        run: |
+          set -euo pipefail
+
+          PLACE_JSON="$(curl --fail --silent --show-error --retry 3 \
+            "https://apis.roblox.com/universes/v1/places/${PLACE_ID}/universe")"
+
+          UNIVERSE_ID="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("universeId") or d.get("id") or "")' <<< "$PLACE_JSON")"
+
+          if [[ -z "$UNIVERSE_ID" || ! "$UNIVERSE_ID" =~ ^[0-9]+$ ]]; then
+            echo "Could not resolve Universe ID."
+            exit 1
+          fi
+
+          GAME_JSON="$(curl --fail --silent --show-error --retry 3 \
+            "https://games.roblox.com/v1/games?universeIds=${UNIVERSE_ID}")"
+
+          VISITS="$(python3 -c 'import json,sys; d=json.load(sys.stdin); games=d.get("data") or []; print(games[0].get("visits","") if games else "")' <<< "$GAME_JSON")"
+
+          if [[ -z "$VISITS" || ! "$VISITS" =~ ^[0-9]+$ ]]; then
+            echo "Roblox did not return a valid visit count."
+            exit 1
+          fi
+
+          CHECKED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          echo "universe_id=$UNIVERSE_ID" >> "$GITHUB_OUTPUT"
+          echo "visits=$VISITS" >> "$GITHUB_OUTPUT"
+          echo "checked_at=$CHECKED_AT" >> "$GITHUB_OUTPUT"
+
+      - name: Update stats.json
+        env:
+          UNIVERSE_ID: ${{ steps.roblox.outputs.universe_id }}
+          VISITS: ${{ steps.roblox.outputs.visits }}
+          CHECKED_AT: ${{ steps.roblox.outputs.checked_at }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("stats.json")
+          incoming = int(os.environ["VISITS"])
+
+          try:
+              data = json.loads(path.read_text(encoding="utf-8"))
+          except Exception:
+              data = {}
+
+          old = data.get("visits")
+
+          if isinstance(old, int) and incoming < old:
+              raise SystemExit(
+                  f"Refusing to overwrite {old} with lower value {incoming}."
+              )
+
+          history = data.get("history")
+          if not isinstance(history, list):
+              history = []
+
+          checked_at = os.environ["CHECKED_AT"]
+
+          if old != incoming:
+              history.append({
+                  "visits": incoming,
+                  "timestamp": checked_at
+              })
+
+          data = {
+              "placeId": "86495471270335",
+              "universeId": os.environ["UNIVERSE_ID"],
+              "visits": incoming,
+              "checkedAt": checked_at,
+              "source": "roblox",
+              "history": history[-1000:]
+          }
+
+          path.write_text(
+              json.dumps(data, indent=2) + "\n",
+              encoding="utf-8"
+          )
+          PY
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- stats.json; then
+            echo "No stats.json changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add stats.json
+          git commit -m "Update Roblox visit stats"
+          git push
