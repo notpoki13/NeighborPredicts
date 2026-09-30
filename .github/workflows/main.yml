@@ -2,7 +2,7 @@ name: Update Roblox Visit Stats
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -15,6 +15,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repository
@@ -28,7 +29,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          PLACE_JSON="$(curl --fail --silent --show-error --retry 3 \
+          PLACE_JSON="$(curl --fail --silent --show-error \
+            --retry 5 \
+            --retry-delay 3 \
+            --retry-all-errors \
             "https://apis.roblox.com/universes/v1/places/${PLACE_ID}/universe")"
 
           UNIVERSE_ID="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("universeId") or d.get("id") or "")' <<< "$PLACE_JSON")"
@@ -38,7 +42,10 @@ jobs:
             exit 1
           fi
 
-          GAME_JSON="$(curl --fail --silent --show-error --retry 3 \
+          GAME_JSON="$(curl --fail --silent --show-error \
+            --retry 5 \
+            --retry-delay 3 \
+            --retry-all-errors \
             "https://games.roblox.com/v1/games?universeIds=${UNIVERSE_ID}")"
 
           VISITS="$(python3 -c 'import json,sys; d=json.load(sys.stdin); games=d.get("data") or []; print(games[0].get("visits","") if games else "")' <<< "$GAME_JSON")"
@@ -73,7 +80,7 @@ jobs:
 
           try:
               data = json.loads(path.read_text(encoding="utf-8"))
-          except Exception:
+          except (OSError, json.JSONDecodeError):
               data = {}
 
           old = data.get("visits")
