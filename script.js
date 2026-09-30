@@ -239,7 +239,17 @@
       ? `${num(left)} visit${left === 1 ? "" : "s"} remaining`
       : "Milestone reached!";
 
-    if (left && left <= 10) {
+    /*
+     * Milestone celebration
+     *
+     * 500 gets its special launch message.
+     * Other completed goals keep the normal message.
+     */
+    if (v >= 500 && v < 600 && g === 600) {
+      e.banner.hidden = false;
+      e.banner.className = "banner win";
+      e.banner.textContent = "🎉 You Hit 500 Visits! 🎉";
+    } else if (left && left <= 10) {
       e.banner.hidden = false;
       e.banner.className = "banner hot";
       e.banner.textContent =
