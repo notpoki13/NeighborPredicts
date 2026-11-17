@@ -1,8 +1,8 @@
 {
   "placeId": "86495471270335",
   "universeId": "7219849414",
-  "visits": 555,
-  "checkedAt": "2026-11-17T12:31:02Z",
+  "visits": 558,
+  "checkedAt": "2026-11-17T21:16:18Z",
   "source": "roblox",
   "history": [
     {
@@ -32,6 +32,10 @@
     {
       "visits": 555,
       "timestamp": "2026-11-16T10:56:59Z"
+    },
+    {
+      "visits": 558,
+      "timestamp": "2026-11-17T21:16:18Z"
     }
   ]
 }
